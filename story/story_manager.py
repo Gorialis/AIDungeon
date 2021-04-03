@@ -234,7 +234,7 @@ class StoryManager:
         return self.encryptor is not None
 
     def on_exit(self):
-        if self.upload_story:
+        if self.upload_story and self.story:
             story_id = self.save_story()
             console_print("Game saved.")
             console_print(

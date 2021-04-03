@@ -1,41 +1,60 @@
 #!/usr/bin/env python3
-import os
-import random
-import sys
-import time
+# -*- coding: utf-8 -*-
 
 print("""
 ================================================================
 AI Dungeon 2 Unleashed will show CUDA errors if it is not installed, this is normal.."
 Do not install cuda unless you have 12GB of VRAM on your NVIDIA GPU.
 ----------------------------------------------------------------
-Loading TensorFlow in compatibility mode..
+Loading base libraries...
+""")
+
+# Import things not specific to model replication first
+import base64
+import getpass
+import os
+import random
+import sys
+
+import colorama
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from playsound import playsound
+
+print("""
+Done
+----------------------------------------------------------------
+Loading TensorFlow in compatibility mode...
 """)
 
 import tensorflow.compat.v1 as tf_v1
 
 tf_v1.disable_v2_behavior()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+GPU_ENABLED = tf_v1.test.is_gpu_available()
+
+print("""
+Done
+----------------------------------------------------------------
+Loading generator and story management...
+""")
+
+from generator.gpt2.gpt2_generator import *
+from story import grammars
+from story.story_manager import *
+from story.utils import *
 
 print("""
 Done
 ================================================================
 """)
 
+
 def cls():
-    os.system('cls' if os.name=='nt' else 'clear')
+    print(colorama.ansi.clear_screen())
 
-from generator.gpt2.gpt2_generator import *
-from story import grammars
-from story.story_manager import *
-from story.utils import *
-from playsound import playsound
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-import base64
-import getpass
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 def splash():
     print("\n0) New Game\n1) Load Game\n")
@@ -231,15 +250,16 @@ def play_aidungeon_2():
     story_manager = UnconstrainedStoryManager(generator, upload_story=upload_story, cloud=False)
     print("\n")
 
+    colorama.init()
+
     with open("opening.txt", "r", encoding="utf-8") as file:
         starter = file.read()
-    _ = os.system('color 0E')
-    _ = os.system('title AI Dungeon 2 Unleashed - Modded by Henk717 - (Re)based on the Thadunge2 fork')
-    _ = os.system('mode con: cols=109 lines=40')
-    cls()
+
+    print(colorama.Fore.LIGHTYELLOW_EX + colorama.Back.BLACK + colorama.ansi.clear_screen())
 
     print(starter)
     print("Modded by Henk717 - (Re)based on the Thadunge2 fork")
+    print("Running on " + (colorama.Fore.LIGHTGREEN_EX + "GPU" if GPU_ENABLED else colorama.Fore.LIGHTRED_EX + "CPU") + colorama.Fore.LIGHTYELLOW_EX + " mode.")
     print("Version : 2.0")
 
     while True:
@@ -287,8 +307,8 @@ def play_aidungeon_2():
                             console_print("File not found, or invalid password")
                             story_manager.encryptor = None
                 else:
-                        cls()
-                        console_print(str(story_manager.story))
+                    cls()
+                    console_print(str(story_manager.story))
 
         while True:
             sys.stdin.flush()
@@ -463,7 +483,7 @@ def play_aidungeon_2():
                     continue
 
                 elif command == "alter": 
-                    if len(story_manager.story.results) is 0: 
+                    if len(story_manager.story.results) == 0: 
                         console_print("There's no results to alter.\n") 
                         continue 
      
@@ -476,7 +496,7 @@ def play_aidungeon_2():
                     console_print(str(story_manager.story))
 
                 elif command == "altergen": 
-                    if len(story_manager.story.results) is 0: 
+                    if len(story_manager.story.results) == 0: 
                         console_print("There's no results to alter.\n") 
                         continue 
 
@@ -541,7 +561,7 @@ def play_aidungeon_2():
                     
                 elif command == 'retry':
 
-                    if len(story_manager.story.actions) is 0:
+                    if len(story_manager.story.actions) == 0:
                         console_print("There is nothing to retry.")
                         continue
 
@@ -703,4 +723,7 @@ def play_aidungeon_2():
 
 
 if __name__ == "__main__":
-    play_aidungeon_2()
+    try:
+        play_aidungeon_2()
+    except KeyboardInterrupt:
+        pass

@@ -1,11 +1,13 @@
+# -*- coding: utf-8 -*-
+colorama
+cryptography
+func_timeout
 google-cloud-storage
 gsutil
 numpy
+playsound
 profanityfilter
 pyyaml
 regex
 tensorflow
-func_timeout
-playsound
 tracery
-cryptography
