@@ -2,14 +2,12 @@ import json
 import os
 import subprocess
 import uuid
-import copy
 from subprocess import Popen
 
 from story.utils import *
 import atexit
 
 from cryptography.fernet import Fernet, InvalidToken
-from generator.gpt2.gpt2_generator import GPT2Generator
 import base64
 
 save_path = "./saves/"
@@ -17,10 +15,9 @@ save_path = "./saves/"
 
 class Story:
     def __init__(
-        self, story_start, story_prompt="", context="", seed=None, game_state=None
+        self, story_start, context="", seed=None, game_state=None
     ):
         self.story_start = story_start
-        self.story_prompt = story_prompt
         self.context = context
         self.rating = -1
 
@@ -52,10 +49,6 @@ class Story:
         self.context = story_dict["context"]
         self.uuid = story_dict["uuid"]
 
-        if "story_prompt" in story_dict.keys():
-            self.story_prompt = story_dict["story_prompt"]
-        else:
-            self.story_prompt = ""
         if "rating" in story_dict.keys():
             self.rating = story_dict["rating"]
         else:
@@ -86,7 +79,7 @@ class Story:
     def __str__(self):
         story_list = [self.story_start]
         for i in range(len(self.results)):
-            story_list.append("\n" + self.actions[i])
+            story_list.append("\n" + self.actions[i] + "\n")
             story_list.append("\n" + self.results[i])
 
         return "".join(story_list)
@@ -100,7 +93,6 @@ class Story:
         story_dict["choices"] = self.choices
         story_dict["possible_action_results"] = self.possible_action_results
         story_dict["game_state"] = self.game_state
-        story_dict["story_prompt"] = self.story_prompt
         story_dict["context"] = self.context
         story_dict["uuid"] = self.uuid
         story_dict["rating"] = self.rating
@@ -130,7 +122,7 @@ class StoryManager:
         self.upload_story = upload_story
         self.encryptor = None
         self.salt = None
-        atexit.register(self.print_save)
+        atexit.register(self.on_exit)
 
     def start_new_story(
         self, story_prompt, context="", game_state=None, upload_story=False
@@ -140,7 +132,6 @@ class StoryManager:
         block = cut_trailing_sentence(block)
         self.story = Story(
             context + story_prompt + block,
-            story_prompt=story_prompt,
             context=context,
             game_state=game_state
         )
@@ -155,28 +146,27 @@ class StoryManager:
         return str(story)
 
     def load_salt(self, story_id):
+        salt = ""
         file_name = "story" + story_id + ".bin"
         exists = os.path.isfile(os.path.join(save_path, file_name))
         if exists:
             with open(os.path.join(save_path, file_name), "rb") as fp:
                 story_encrypted = fp.read()
-                return base64.urlsafe_b64decode(story_encrypted[:44])
-        return None
+                salt = base64.urlsafe_b64decode(story_encrypted[:44])
+        return salt
 
-    def load_from_storage(self, story_id, decrypt=True):
+    def load_from_storage(self, story_id):
         if not os.path.exists(save_path):
             return None
 
-        decrypt = decrypt and self.encryptor is not None
-
-        file_name = "story" + story_id + (".bin" if decrypt else ".json")
+        file_name = "story" + story_id + (".json" if self.encryptor is None else ".bin")
         if self.cloud:
             cmd = "gsutil cp gs://aidungeonstories/" + file_name + " " + save_path
             os.system(cmd)
 
         exists = os.path.isfile(os.path.join(save_path, file_name))
         if exists:
-            if decrypt:
+            if self.encryptor is not None:
                 with open(os.path.join(save_path, file_name), "rb") as fp:
                     story_encrypted = fp.read()
                     try:
@@ -190,26 +180,10 @@ class StoryManager:
             self.story = Story("")
             self.story.init_from_dict(game)
             changed = False
-            if "model" in game.keys():
-                if self.generator is not None:
-                    if self.generator.model_name != game["model"]:
-                        console_print("Warning: Save was generated using the model " + game["model"] + "; load this save in a new session to use this model.")
-                else:
-                    console_print("Generating model (This might take a few minutes)")
-                    try:
-                        self.generator = GPT2Generator(model_name=game["model"])
-                    except:
-                        console_print("Warning: The model used by the save (" + game["model"] + ") is not installed. Using the default.")
-                        self.generator = GPT2Generator()
-            else:
-                if self.generator is None:
-                    self.generator = GPT2Generator()
             if "top_p" in game.keys():
                 changed = changed or self.generator.change_top_p(game["top_p"])
             if "temp" in game.keys():
                 changed = changed or self.generator.change_temp(game["temp"])
-            if "raw" in game.keys():
-                self.generator.change_raw(game["raw"])
             if changed:
                 console_print("Please wait while the AI model is regenerated...")
                 self.generator.gen_output()
@@ -217,23 +191,12 @@ class StoryManager:
         else:
             return None
 
-    def save_story(self, name=None, overwrite=True):
-        if self.story.uuid is None:
-            self.story.uuid = str(uuid.uuid1())
-
-        if name:
-            story_id = name
-            overwrite = False
-        else:
-            story_id = self.story.uuid if overwrite else str(uuid.uuid1())
-
-        saved_story = self.story if overwrite else copy.copy(self.story)
-        saved_story.uuid = story_id
-        story_dict = saved_story.to_dict()
+    def save_story(self):
+        story_id = str(uuid.uuid1())
+        self.story.uuid = story_id
+        story_dict = self.story.to_dict()
         story_dict["top_p"] = self.generator.top_p
         story_dict["temp"] = self.generator.temp
-        story_dict["raw"] = self.generator.raw
-        story_dict["model"] = self.generator.model_name
 
         if not os.path.exists(save_path):
             os.makedirs(save_path)
@@ -270,7 +233,7 @@ class StoryManager:
     def has_encryption(self):
         return self.encryptor is not None
 
-    def print_save(self):
+    def on_exit(self):
         if self.upload_story:
             story_id = self.save_story()
             console_print("Game saved.")
@@ -287,29 +250,131 @@ class StoryManager:
 
 class UnconstrainedStoryManager(StoryManager):
     def act(self, action_choice):
-        if self.generator.raw:
-            if len(action_choice) > 0:
-                if not action_choice[-1].isspace():
-                    action_choice = action_choice + " "
-                if not action_choice[0].isspace():
-                    action_choice = " " + action_choice
-            else:
-                action_choice = " "
         result = self.generate_result(action_choice)
         self.story.add_to_story(action_choice, result)
         return result
-
+        
     def act_with_timeout(self, action_choice):
         return func_timeout(self.inference_timeout, self.act, (action_choice,))
 
     def generate_result(self, action):
         block = self.generator.generate(self.story_context() + action)
         return block
-
-    def generate_with_timeout(self, action):
-        return func_timeout(self.inference_timeout, self.generate_result, (action,))
-
+        
     def set_context(self, context):
         self.story.context = context
     def get_context(self):
-        return self.story.context
+        return self.story.context       
+
+
+class ConstrainedStoryManager(StoryManager):
+    def __init__(self, generator, action_verbs_key="classic"):
+        super().__init__(generator)
+        self.action_phrases = get_action_verbs(action_verbs_key)
+        self.cache = False
+        self.cacher = None
+        self.seed = None
+
+    def enable_caching(
+        self, credentials_file=None, seed=0, bucket_name="dungeon-cache"
+    ):
+        self.cache = True
+        self.cacher = Cacher(credentials_file, bucket_name)
+        self.seed = seed
+
+    def start_new_story(self, story_prompt, context="", game_state=None):
+        if self.cache:
+            return self.start_new_story_cache(story_prompt, game_state=game_state)
+        else:
+            return super().start_new_story(
+                story_prompt, context=context, game_state=game_state
+            )
+
+    def start_new_story_generate(self, story_prompt, game_state=None):
+        super().start_new_story(story_prompt, game_state=game_state)
+        self.story.possible_action_results = self.get_action_results()
+        return self.story.story_start
+
+    def start_new_story_cache(self, story_prompt, game_state=None):
+
+        response = self.cacher.retrieve_from_cache(self.seed, [], "story")
+        if response is not None:
+            story_start = story_prompt + response
+            self.story = Story(story_start, seed=self.seed)
+            self.story.possible_action_results = self.get_action_results()
+        else:
+            story_start = self.start_new_story_generate(
+                story_prompt, game_state=game_state
+            )
+            self.story.seed = self.seed
+            self.cacher.cache_file(self.seed, [], story_start, "story")
+
+        return story_start
+
+    def load_story(self, story, from_json=False):
+        story_string = super().load_story(story, from_json=from_json)
+        return story_string
+
+    def get_possible_actions(self):
+        if self.story.possible_action_results is None:
+            self.story.possible_action_results = self.get_action_results()
+
+        return [
+            action_result[0] for action_result in self.story.possible_action_results
+        ]
+
+    def act(self, action_choice_str):
+
+        try:
+            action_choice = int(action_choice_str)
+        except:
+            print("Error invalid choice.")
+            return None, None
+
+        if action_choice < 0 or action_choice >= len(self.action_phrases):
+            print("Error invalid choice.")
+            return None, None
+
+        self.story.choices.append(action_choice)
+        action, result = self.story.possible_action_results[action_choice]
+        self.story.add_to_story(action, result)
+        self.story.possible_action_results = self.get_action_results()
+        return result, self.get_possible_actions()
+
+    def get_action_results(self):
+        if self.cache:
+            return self.get_action_results_cache()
+        else:
+            return self.get_action_results_generate()
+
+    def get_action_results_generate(self):
+        action_results = [
+            self.generate_action_result(self.story_context(), phrase)
+            for phrase in self.action_phrases
+        ]
+        return action_results
+
+    def get_action_results_cache(self):
+        response = self.cacher.retrieve_from_cache(
+            self.story.seed, self.story.choices, "choices"
+        )
+
+        if response is not None:
+            print("Retrieved from cache")
+            return json.loads(response)
+        else:
+            print("Didn't receive from cache")
+            action_results = self.get_action_results_generate()
+            response = json.dumps(action_results)
+            self.cacher.cache_file(
+                self.story.seed, self.story.choices, response, "choices"
+            )
+            return action_results
+
+    def generate_action_result(self, prompt, phrase, options=None):
+
+        action_result = (
+            phrase + " " + self.generator.generate(prompt + " " + phrase, options)
+        )
+        action, result = split_first_sentence(action_result)
+        return action, result
