@@ -255,7 +255,7 @@ def play_aidungeon_2():
     with open("opening.txt", "r", encoding="utf-8") as file:
         starter = file.read()
 
-    print(colorama.Fore.LIGHTYELLOW_EX + colorama.Back.BLACK + colorama.ansi.clear_screen())
+    print(colorama.Fore.LIGHTYELLOW_EX + colorama.Back.BLACK + colorama.ansi.clear_screen(), end='')
 
     print(starter)
     print("Modded by Henk717 - (Re)based on the Thadunge2 fork")
@@ -311,8 +311,13 @@ def play_aidungeon_2():
                     console_print(str(story_manager.story))
 
         while True:
+            print(colorama.Style.BRIGHT + colorama.Fore.WHITE, end='')
+
             sys.stdin.flush()
             action = input("> ").strip()
+
+            print(colorama.Style.DIM, end='')
+
             if len(action) > 0 and action[0] == "/":
                 split = action[1:].split(" ")  # removes preceding slash
                 command = split[0].lower()
@@ -646,6 +651,8 @@ def play_aidungeon_2():
                     console_print(f"Unknown command: {command}")
 
             else:
+                print(colorama.Fore.BLUE, end='')
+
                 if action == "":
                     action = "\n> \n"
 
@@ -682,6 +689,8 @@ def play_aidungeon_2():
                         console_print(str(story_manager.story))
                         if ping:
                             playsound('ping.mp3')
+
+                print(colorama.Fore.LIGHTYELLOW_EX, end='')
 
                 if player_won(result):
                     console_print(result + "\n CONGRATS YOU WIN")
@@ -726,4 +735,5 @@ if __name__ == "__main__":
     try:
         play_aidungeon_2()
     except KeyboardInterrupt:
-        pass
+        print(colorama.Style.RESET_ALL + colorama.Fore.RESET + colorama.Back.RESET)
+        cls()
