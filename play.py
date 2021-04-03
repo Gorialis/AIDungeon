@@ -4,10 +4,22 @@ import random
 import sys
 import time
 
-print(
-    "AI Dungeon 2 Unleashed will show CUDA errors if it is not installed, this is normal.."
-    + "\n Do not install cuda unless you have 12GB of VRAM on your NVIDIA GPU.\n\n"
-)
+print("""
+================================================================
+AI Dungeon 2 Unleashed will show CUDA errors if it is not installed, this is normal.."
+Do not install cuda unless you have 12GB of VRAM on your NVIDIA GPU.
+----------------------------------------------------------------
+Loading TensorFlow in compatibility mode..
+""")
+
+import tensorflow.compat.v1 as tf_v1
+
+tf_v1.disable_v2_behavior()
+
+print("""
+Done
+================================================================
+""")
 
 def cls():
     os.system('cls' if os.name=='nt' else 'clear')

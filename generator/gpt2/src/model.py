@@ -1,6 +1,22 @@
 import numpy as np
-import tensorflow as tf
-from tensorflow.contrib.training import HParams
+import tensorflow.compat.v1 as tf
+
+
+class HParams(dict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def override_from_dict(self, other):
+        self.update(other)
+
+    def __getattribute__(self, name: str):
+        try:
+            return super().__getattribute__(name)
+        except AttributeError as pure:
+            try:
+                return self[name]
+            except KeyError as delegated:
+                raise pure from delegated
 
 
 def default_hparams():
